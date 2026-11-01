@@ -1,5 +1,6 @@
 @echo off
 setlocal
+chcp 65001 >nul
 cd /d "%~dp0"
 
 where py >nul 2>nul
@@ -20,7 +21,8 @@ if "%WORKMATE_PYTHON_ENV%"=="" set "WORKMATE_PYTHON_ENV=%USERPROFILE%\Desktop\py
 set "PYTHON_BIN=%WORKMATE_PYTHON_ENV%\Scripts\python.exe"
 if not exist "%PYTHON_BIN%" (
   echo Python 가상환경을 찾을 수 없습니다: %WORKMATE_PYTHON_ENV%
-  echo WORKMATE_PYTHON_ENV 환경 변수로 가상환경 위치를 지정해 주세요.
+  echo WORKMATE_PYTHON_ENV 환경 변수에 실제 가상환경 경로를 지정해 주세요.
+  echo 예: set "WORKMATE_PYTHON_ENV=C:\path\to\python\.venv"
   pause
   exit /b 1
 )
