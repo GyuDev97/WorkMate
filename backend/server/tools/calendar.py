@@ -1,4 +1,6 @@
-from server.models.schemas import CalendarEventDraft, Event
+from datetime import datetime
+
+from server.models.schemas import CalendarEventDraft, CalendarEventPatch, Event
 from server.providers.calendar.base import CalendarProvider
 
 
@@ -21,11 +23,17 @@ class CalendarTool:
     def search_events(self, query: str) -> list[Event]:
         return self.provider.search_events(query)
 
+    def events_between(self, start: datetime, end: datetime, query: str | None = None) -> list[Event]:
+        return self.provider.events_between(start, end, query)
+
+    def get_event(self, event_id: str) -> Event:
+        return self.provider.get_event(event_id)
+
     def create_event(self, draft: CalendarEventDraft) -> Event:
         return self.provider.create_event(draft)
 
-    def update_event(self, event_id: str, draft: CalendarEventDraft) -> Event:
-        return self.provider.update_event(event_id, draft)
+    def update_event(self, event_id: str, patch: CalendarEventPatch) -> Event:
+        return self.provider.update_event(event_id, patch)
 
     def delete_event(self, event_id: str) -> None:
         self.provider.delete_event(event_id)

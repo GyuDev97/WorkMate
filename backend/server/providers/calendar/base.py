@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from server.models.schemas import CalendarConnectionStatus, CalendarEventDraft, Event
+from datetime import datetime
+
+from server.models.schemas import CalendarConnectionStatus, CalendarEventDraft, CalendarEventPatch, Event
 
 
 class CalendarProviderError(RuntimeError):
@@ -10,6 +12,10 @@ class CalendarProviderError(RuntimeError):
 
 
 class CalendarNotConnected(CalendarProviderError):
+    pass
+
+
+class CalendarEventNotFound(CalendarProviderError):
     pass
 
 
@@ -23,6 +29,8 @@ class CalendarProvider(Protocol):
     def today_events(self) -> list[Event]: ...
     def tomorrow_events(self) -> list[Event]: ...
     def search_events(self, query: str) -> list[Event]: ...
+    def events_between(self, start: datetime, end: datetime, query: str | None = None) -> list[Event]: ...
+    def get_event(self, event_id: str) -> Event: ...
     def create_event(self, draft: CalendarEventDraft) -> Event: ...
-    def update_event(self, event_id: str, draft: CalendarEventDraft) -> Event: ...
+    def update_event(self, event_id: str, patch: CalendarEventPatch) -> Event: ...
     def delete_event(self, event_id: str) -> None: ...

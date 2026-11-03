@@ -16,3 +16,6 @@ credentials.json
 __pycache__/
 *.py[cod]
 .pytest_cache/
+# Google OAuth desktop client files (never commit)
+google.json
+client_secret*.json

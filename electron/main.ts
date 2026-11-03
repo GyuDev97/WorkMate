@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, Menu, nativeImage, Notification, Tray } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, Notification, Tray } from 'electron'
 import { ChildProcess, spawn } from 'node:child_process'
 import path from 'node:path'
 
@@ -38,6 +38,8 @@ async function waitForBackend() {
   }
   console.warn(`[backend] did not become ready at ${backendUrl}; renderer will show its retry state.`)
 }
+
+ipcMain.on('focus-app', () => { windowRef?.show(); windowRef?.focus() })
 
 function createWindow() {
   windowRef = new BrowserWindow({

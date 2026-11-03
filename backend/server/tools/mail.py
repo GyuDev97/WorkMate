@@ -1,30 +1,68 @@
-from datetime import datetime, timedelta, timezone
+from __future__ import annotations
 
-from server.models.schemas import MailSummary
+from dataclasses import dataclass
+from typing import Any
+
+from server.models.schemas import ActionCard
+from server.providers.mail.base import MailError, MailNotConnected
+from server.services.mail import MailActionService, MailService
+
+ASSISTANT_PAGE = 10
+
+
+@dataclass
+class SplitResult:
+    """One tool result, two audiences. `llm` is the only part the model ever receives (counts and status).
+    `ui` goes to the screen alone: it is never added to the model input, the conversation database or a tool trace."""
+    llm: Any
+    ui: dict[str, Any] | None = None
+
+
+def _failed(error: MailError) -> SplitResult:
+    if isinstance(error, MailNotConnected):
+        reason, message = "not_connected", "메일이 연결되어 있지 않습니다."
+    elif getattr(error, "code", None) == 3:
+        reason, message = "session_expired", "메일 세션이 만료되어 재인증이 필요합니다."
+    else:
+        reason, message = "error", "메일 작업에 실패했습니다."
+    return SplitResult(llm={"success": False, "reason": reason, "message": message}, ui={"kind": "mail_error", "message": str(error)})
 
 
 class MailTool:
     name = "mail"
-    description = "Search and summarize mail. V0.1 uses mock Bizmeka data."
+    description = "Read mail counts and search for the screen; prepare outgoing mail for approval. Mail content never reaches the model."
 
-    def important_mail(self) -> list[MailSummary]:
-        now = datetime.now(timezone.utc)
-        return [
-            MailSummary(id="mail-kim", sender="김대리", subject="RAG 테스트 결과 검토 부탁드립니다", received_at=now - timedelta(hours=2), needs_reply=True, preview="검토 의견을 오늘 오후까지 공유해 주실 수 있을까요?"),
-            MailSummary(id="mail-ops", sender="인프라운영팀", subject="금일 서버 점검 안내", received_at=now - timedelta(hours=4), needs_reply=False, preview="13:30부터 예정된 정기 점검 범위를 확인해 주세요."),
-        ]
+    def __init__(self, service: MailService, actions: MailActionService) -> None:
+        self.service, self.actions = service, actions
 
-    def execute(self, **kwargs: object) -> list[MailSummary]:
-        return self.important_mail()
+    def status(self) -> SplitResult:
+        status = self.service.status()
+        connected = status.state in ("mock", "connected")
+        return SplitResult(llm={"success": True, "connected": connected, "mock": status.provider == "mock", "message": "메일 연결됨" if connected else "메일이 연결되어 있지 않습니다."},
+                           ui={"kind": "mail_status", "state": status.state, "detail": status.detail, "mock": status.provider == "mock"})
 
-    def unread_mail(self) -> list[MailSummary]:
-        return [mail for mail in self.important_mail() if mail.is_unread]
+    def unread_count(self) -> SplitResult:
+        try:
+            self.service.require_ready()
+            count = self.service.unread_total()
+        except MailError as error:
+            return _failed(error)
+        return SplitResult(llm={"success": True, "unread_count": count, "message": "미확인 메일 건수 조회 완료"},
+                           ui={"kind": "mail_unread", "unread_count": count, "mock": self.service.provider.is_mock})
 
-    def search_mail(self, query: str) -> list[MailSummary]:
-        needle = query.lower().strip()
-        return [mail for mail in self.important_mail() if not needle or needle in f"{mail.sender} {mail.subject} {mail.preview}".lower()]
+    def search(self, query: str, unread_only: bool = False) -> SplitResult:
+        try:
+            self.service.require_ready()
+            folder = "ALL" if query.strip() else self.service.inbox_key()
+            page = self.service.messages(folder, 1, ASSISTANT_PAGE, unread_only, query or None)
+        except MailError as error:
+            return _failed(error)
+        items = [item.model_dump() for item in page.items]
+        return SplitResult(llm={"success": True, "count": len(items), "more_pages": page.total_pages > 1, "message": "메일 조회 완료. 목록은 화면에 표시됩니다."},
+                           ui={"kind": "mail_list", "query": query, "mock": self.service.provider.is_mock, "items": items, "more_pages": page.total_pages > 1})
 
-    def get_mail(self, identifier: str) -> MailSummary | dict[str, str]:
-        for mail in self.important_mail():
-            if identifier in (mail.id, mail.sender) or identifier.lower() in mail.subject.lower(): return mail
-        return {"error": "Mail not found"}
+    def propose_send(self, to: list[str], cc: list[str], bcc: list[str], subject: str, body: str) -> ActionCard | dict[str, Any]:
+        try:
+            return self.actions.propose_send(to, cc, bcc, subject, body)
+        except MailError as error:
+            return {"error": str(error)}

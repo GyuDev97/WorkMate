@@ -1,243 +1,218 @@
-# workMate V0.1
+# workMate
 
-workMate는 메일·일정·개인 업무·향후 WorkMemory를 종합하여 먼저 업무를 챙기는 데스크톱 개인 AI 비서의 실행 가능한 기반입니다. V0.1은 외부 계정 없이도 Electron, React UI, FastAPI Agent, SQLite Task DB를 함께 실행할 수 있도록 Mock Provider를 기본값으로 제공합니다.
-
-## 지식베이스 — WorkMemory 1단계 통합
-
-WorkMate에는 로컬 폴더와 macOS에 마운트된 SMB 폴더의 문서를 수집하는 지식베이스가 포함되어 있습니다. 원본 파일이나 기존 WorkMemory/MariaDB 데이터는 변경하지 않습니다.
-
-- 등록 → 백그라운드 수집·파싱 → 문서 목록 → 추출 원문 열람
-- 지원 형식: TXT, Markdown, CSV, 코드, JSON/YAML/SQL, PDF, DOCX, XLSX
-- 안전 정책: `.env`, 인증서·개인키, `node_modules`, 가상환경 폴더 제외; 파일 최대 25 MiB, PDF 최대 500쪽, XLSX 최대 100,000셀
-- 변경 파일만 SHA-256으로 다시 처리하며, 삭제된 파일은 지식베이스에서 숨김 처리
-- 실행 중 처리 수·전체 수·퍼센트를 표시하며, 파일 사이에서 안전하게 수집을 중단할 수 있음
-
-SMB는 `smb://` 주소가 아닌 운영체제에 마운트된 폴더 경로를 등록합니다. macOS에서는 보통 `/Volumes/공유이름/...` 형식입니다.
-
-### 빠른 실행
-
-프로젝트 루트의 자동 실행 스크립트를 사용하면 백엔드와 Electron 앱이 함께 실행됩니다.
-
-```bash
-./start-workmate.sh       # macOS
-start-workmate.bat        # Windows
-```
-
-기본적으로 macOS 스크립트는 공유 Python 환경을 사용합니다. 다른 가상환경을 쓰려면 `WORKMATE_PYTHON_ENV` 환경 변수로 경로를 지정할 수 있습니다.
+workMate는 일정·메일·업무·지식베이스를 한곳에서 정리하는 Electron 기반 개인 AI 업무 비서입니다. 개발 환경에서는 React Renderer, Electron 데스크톱 셸, FastAPI Backend가 함께 동작합니다.
 
 ## 현재 구현 상태
 
-- Electron 데스크톱 셸 (macOS / Windows)과 React + TypeScript 업무 대시보드
-- Home, Assistant, Tasks, Activity 화면 및 Backend Offline 상태 화면
-- FastAPI `GET /health`, dashboard, task 생성/완료, chat API
-- 명시적 Intent Router 기반 Agent: 오늘 업무, 중요 메일, 메일 초안, 일정 등록 요청을 처리
-- Mock Bizmeka Mail / Google Calendar / LLM / WorkMemory Provider 상태
-- 첫 실행 시 제공되는 4개의 Mock 업무와 로컬 업무 추가/완료
-- SQLite에 지속되는 Task 데이터와 repository/service 계층
-- Tray 메뉴, `Cmd/Ctrl + Shift + Space` 빠른 호출 구조, native notification 확장 지점
-- Action Card 모델: 메일/일정처럼 외부 상태를 바꾸는 작업은 검토 후 실행하도록 표시
+| 영역 | 상태 | 설명 |
+| --- | --- | --- |
+| 데스크톱 UI | 구현 | Home, Assistant, 업무, 활동 기록, 설정 화면 |
+| 업무 관리 | 구현 | SQLite 기반 업무 생성·완료 처리 |
+| LLM Agent | 구현 | Mock 또는 OpenAI Responses API 선택 가능 |
+| Tool Calling | 구현 | 일정·업무·메일·지식베이스 Tool 호출과 대화 문맥 유지 |
+| Calendar | 구현 | Mock / Google Calendar Provider 전환, OAuth Desktop 연결 |
+| 변경 승인 | 구현 | 외부 일정 변경은 Action Card 승인 후에만 실행 |
+| Mail | Mock | Bizmeka 실제 API 연동은 후속 작업 |
+| WorkMemory | 1단계 | 로컬·SMB 마운트 폴더 문서 수집 및 검색 기반 마련 |
 
-메일 발송과 일정 생성은 V0.1에서 실제 실행하지 않습니다. API 연동 전에는 의도적으로 Action Card만 생성해 안전하게 유지합니다.
+## 빠른 실행
 
-## Architecture
+macOS에서는 프로젝트 루트에서 아래 명령 하나로 실행합니다.
 
-```text
-Electron desktop shell
-  ├─ Renderer: React + TypeScript (Vite)
-  ├─ Tray + global shortcut + backend lifecycle
-  └─ REST → FastAPI
-              ├─ API router / Agent intent router
-              ├─ Tool layer: Mail, Calendar, Task, Memory
-              ├─ Provider seams: Mock LLM, future OpenAI/Bizmeka/Google/WorkMemory
-              ├─ Dashboard + Task services
-              └─ SQLite repository (V0.1)
+```bash
+./start-workmate.sh
 ```
 
-Electron starts FastAPI automatically in development when `npm run dev` runs and terminates that child process when the app exits. Packaging Python and its dependencies inside the desktop installer is intentionally kept as a production TODO; the development lifecycle works today and the boundary is already isolated in `electron/main.ts`.
+스크립트는 다음을 자동으로 처리합니다.
 
-## Directory structure
+1. Node.js, npm, Python 가상환경 존재 여부 확인
+2. `.env`가 없으면 `.env.example`을 복사해 생성
+3. Python·Node 의존성이 없을 때 설치
+4. Vite, Electron, FastAPI를 함께 실행
 
-```text
-workMate/
-├─ electron/                 # Desktop shell, preload bridge, tray and shortcut
-├─ src/                      # React screens, API client and application styles
-├─ backend/
-│  ├─ server/api/            # HTTP endpoints and dependency composition
-│  ├─ server/agent/          # Intent / tool selection orchestration
-│  ├─ server/tools/          # Mail, Calendar, Task, Memory tool contracts
-│  ├─ server/providers/      # LLM provider seams
-│  ├─ server/services/       # Dashboard and task business logic
-│  ├─ server/scheduler/      # Pure reminder planning seam
-│  ├─ server/database/       # SQLite repository
-│  └─ tests/
-├─ .env.example
-└─ package.json
+Electron 개발 모드가 FastAPI를 직접 시작하고 종료하므로, 별도로 Backend를 실행할 필요가 없습니다. 종료는 실행 중인 터미널에서 `Ctrl+C`를 누릅니다.
+
+Windows에서는 다음 파일을 실행합니다.
+
+```bat
+start-workmate.bat
 ```
 
-## Why these choices
+Windows 기본 Python 가상환경 경로는 `D:\python\venv`입니다. 다른 경로를 쓰는 경우 실행 전에 `WORKMATE_PYTHON_ENV` 환경 변수로 지정할 수 있습니다.
 
-Electron + React + TypeScript preserves a shared macOS/Windows desktop codebase with native tray, notifications and global shortcuts. FastAPI is a compact, typed backend suitable for tool orchestration. Vite keeps the renderer feedback loop fast.
+## 처음 한 번만 하는 준비
 
-V0.1 uses **SQLite** rather than MariaDB: it has no separate local service, is reliable for a per-user desktop app, and makes onboarding and packaging substantially simpler. All persistence goes through `TaskRepository`, so moving to SQLAlchemy/MariaDB or a cloud database later does not require changing API, Agent, or UI code.
+필수 환경은 Node.js 20 이상과 Python 3.10 이상입니다. 기본 Python 가상환경은 다음 위치를 사용합니다.
 
-## Development setup
+```text
+/Users/bizntech/Desktop/python/venv
+```
 
-Prerequisites: Node.js 20+ and Python 3.10+.
+다른 가상환경을 쓰려면 실행 전에 경로를 지정합니다.
 
-This workspace uses the shared Python environment at `/Users/bizntech/Desktop/python/.venv`. It already contains the packages required by workMate. Do not create a second `backend/.venv` for normal development.
+```bash
+WORKMATE_PYTHON_ENV=/원하는/가상환경 ./start-workmate.sh
+```
+
+수동으로 준비하려면 다음을 실행합니다.
 
 ```bash
 cp .env.example .env
 npm install
-# Only when the shared environment needs its dependencies refreshed:
-/Users/bizntech/Desktop/python/.venv/bin/pip install -r backend/requirements.txt
+/Users/bizntech/Desktop/python/venv/bin/pip install -r backend/requirements.txt
 ```
 
-On Windows use the equivalent shared virtual-environment path (for example `C:\\path\\to\\python\\.venv\\Scripts\\...`).
+`.env`와 OAuth token은 Git에 포함되지 않습니다. Finder에서 점으로 시작하는 파일을 보려면 `Cmd + Shift + .`를 누릅니다.
 
-### macOS: run the desktop app
+## 실행 방법
+
+### 통합 실행
 
 ```bash
-source /Users/bizntech/Desktop/python/.venv/bin/activate
+./start-workmate.sh
+```
+
+### 개발 명령 직접 실행
+
+```bash
+source /Users/bizntech/Desktop/python/venv/bin/activate
 npm run dev
 ```
 
-This starts Vite, launches Electron, and has Electron start FastAPI on `http://127.0.0.1:8765`. Press `Cmd + Shift + Space` to show/hide workMate. Closing the main window hides it; choose **종료** in the tray menu to quit.
+개발 서버는 다음 주소를 사용합니다.
 
-Vite and Electron both use `127.0.0.1:5173` during development. This explicit IPv4 binding prevents macOS `localhost` from resolving Vite to IPv6 (`::1`) while Electron attempts IPv4. To automatically open the renderer DevTools while diagnosing a development issue, run `WORKMATE_OPEN_DEVTOOLS=1 npm run dev`.
+- Renderer: `http://127.0.0.1:5173`
+- Backend: `http://127.0.0.1:8765`
 
-### Windows: run the desktop app
+개발 중 Renderer DevTools가 필요하면 `.env`에서 아래 값을 설정한 뒤 다시 실행합니다.
 
-In PowerShell:
-
-```powershell
-C:\path\to\python\.venv\Scripts\Activate.ps1
-npm run dev
+```dotenv
+WORKMATE_OPEN_DEVTOOLS=1
 ```
 
-The same shortcut becomes `Ctrl + Shift + Space`. If Windows has reserved it, change the registration in `electron/main.ts`. Packaging should be performed on Windows for the signed Windows installer; cross-platform native signing is not configured in V0.1.
+## 검증 스크립트
 
-### Run components separately
+전체 테스트·타입 검사·린트·빌드를 한 번에 실행합니다.
 
 ```bash
-# terminal 1
-source /Users/bizntech/Desktop/python/.venv/bin/activate
-npm run backend:dev
-
-# terminal 2
-npm run dev:renderer
+./verify-workmate.sh
 ```
 
-Open the Vite URL in a browser or start Electron with `npm run dev:electron` after the renderer is ready.
+개별 명령은 아래와 같습니다.
 
-## APIs
+```bash
+npm run backend:test
+npm run typecheck
+npm run lint
+npm run build
+```
 
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /health` | Backend liveness; returns `{ "status": "ok", "service": "workMate" }` |
-| `GET /api/v1/dashboard` | Briefing, events, mail summaries, task list, provider states |
-| `POST /api/v1/chat` | Agent response and optional confirmation-required Action Card |
-| `POST /api/v1/tasks` | Create local workMate task |
-| `POST /api/v1/tasks/{id}/complete` | Complete a task |
+## OpenAI 연결
 
-## Environment and real integrations
-
-Copy `.env.example` to `.env`; `.env` is ignored by Git. The default provider modes are `mock`, so no credentials are needed.
-
-To activate the real integrations, the next implementation phase needs:
-
-- **Bizmeka:** API base URL, OAuth/API-key authentication details, permission scopes, and mail endpoint schema.
-- **Google Calendar:** Google Cloud OAuth desktop-client credentials, redirect strategy, scopes, token storage policy, and selected calendar IDs.
-- **LLM:** provider API key via environment/OS keychain, selected model, data-retention and enterprise policy. Do not log prompts with confidential mail content.
-- **WorkMemory:** API base URL, authentication, response contract, and project/user authorization model.
-
-No secrets are hardcoded. Sensitive content is not inserted into activity records. A real integration should keep read/search actions distinct from `SEND_MAIL`, `CREATE_EVENT`, `UPDATE_EVENT`, and `DELETE_EVENT`; the latter must stay behind a user approval flow.
-
-## V0.2 Agent and tool calling
-
-`POST /api/v1/chat` now runs a bounded agent loop: provider request → selected tool execution → provider synthesis. The loop permits multiple calls in a turn and stops after three tool rounds. Tool execution returns a compact trace (`tool`, risk, success, duration) to the client; it does not expose chain-of-thought, prompts, tokens, API keys, or mail bodies.
-
-The Tool Registry is the single source of tool JSON schema, Pydantic argument validation, risk level, and executor. Available tools include today's/tomorrow's events, event search, local task list/create/complete, unread/important/search/get mail, mail-draft creation, calendar proposal, and WorkMemory search.
-
-| Risk | Behavior |
-| --- | --- |
-| `READ` | Runs automatically for lookup/search. |
-| `WRITE_LOCAL` | Creates or completes a local workMate task when explicitly requested. |
-| `PROPOSED_EXTERNAL_WRITE` | Produces a pending-approval Action Card only; it cannot send mail or change Google Calendar. |
-
-Conversation context is limited to the most recent eight messages per `conversation_id` in backend memory. It is separate from WorkMemory and is intentionally not persisted in V0.2.
-
-### OpenAI setup
-
-The default is safe offline mode:
+기본값은 외부 호출이 없는 Mock 모드입니다.
 
 ```dotenv
 WORKMATE_LLM_PROVIDER=mock
 ```
 
-To use the real provider, set the following in the repository-root `.env`, then restart the backend/Electron development session:
+실제 OpenAI Responses API를 사용하려면 프로젝트 루트의 `.env`에 다음을 설정하고 앱을 다시 시작합니다.
 
 ```dotenv
 WORKMATE_LLM_PROVIDER=openai
-OPENAI_API_KEY=your_key_here
+OPENAI_API_KEY=실제_API_키
 WORKMATE_LLM_MODEL=gpt-4.1-mini
 ```
 
-The provider uses the OpenAI Python SDK's Responses API with function definitions generated from the Tool Registry. With no key, or when `mock` is selected, the deterministic Mock LLM exercises the same agent/tool loop without network access. Do not add the key to source control.
+실행 후 Assistant에 메시지를 보내고 터미널에서 아래 로그를 확인하면 실제 OpenAI Provider가 동작한 것입니다.
 
-In Electron development mode, the terminal prints safe execution events (provider, model, selected tools, success/failure, elapsed time). It never prints API keys, user text, prompts, tool output, or mail bodies. Set `WORKMATE_AGENT_DEBUG=1` to retain these events outside development mode.
+```text
+agent_request provider=openai
+```
 
-## V0.3 Google Calendar
+일정·메일·업무처럼 Tool이 필요한 요청에서는 선택된 Tool과 성공 여부도 안전한 범위에서 로그에 표시됩니다. API 키, 프롬프트 원문, OAuth token, 메일 본문은 로그에 기록하지 않습니다.
 
-Calendar is now a swappable provider, selected in `.env`:
+## Google Calendar 연결
+
+기본값은 안전한 Mock Calendar입니다.
 
 ```dotenv
-WORKMATE_CALENDAR_PROVIDER=mock # safe default
-# WORKMATE_CALENDAR_PROVIDER=google
+WORKMATE_CALENDAR_PROVIDER=mock
 WORKMATE_TIMEZONE=Asia/Seoul
 GOOGLE_CALENDAR_ID=primary
-# GOOGLE_CALENDAR_CREDENTIALS_PATH=/absolute/path/to/google-oauth-desktop-client.json
-# GOOGLE_CALENDAR_TOKEN_PATH=data/google_calendar_token.json
 ```
 
-`MockCalendarProvider` preserves the offline demo. `GoogleCalendarProvider` uses the Google Calendar v3 client and the OAuth Desktop Application local-server authorization flow. It requests only `https://www.googleapis.com/auth/calendar.events`, which supports the event read/search/create/update/delete actions this app provides; it does not request broad Drive, Mail, or profile scopes.
+실제 Google Calendar를 연결하려면 다음 순서로 준비합니다.
 
-### Google Cloud setup and first connection
+1. Google Cloud Console에서 **Google Calendar API**를 활성화합니다.
+2. OAuth 동의 화면을 구성합니다.
+3. 애플리케이션 유형이 **Desktop app**인 OAuth Client를 생성합니다.
+4. 받은 Client JSON을 저장소 밖의 안전한 위치에 둡니다.
+5. `.env`에 아래 값을 설정합니다.
 
-1. In Google Cloud Console, enable **Google Calendar API** for the selected project.
-2. Configure the OAuth consent screen, then create an OAuth client with application type **Desktop app**.
-3. Download its JSON outside this repository and set its absolute path as `GOOGLE_CALENDAR_CREDENTIALS_PATH` in the root `.env`.
-4. Set `WORKMATE_CALENDAR_PROVIDER=google`, restart workMate, then open **설정 → Google Calendar → Google 계정 연결**.
-5. The system browser opens for sign-in and consent. After the localhost callback completes, workMate stores a refreshable token and the Dashboard uses the selected Google calendar.
-
-The provider sends `singleEvents=true` on list/search calls, so recurring-event occurrences are returned as individual events. Google `dateTime` and all-day `date` event fields are normalized to workMate `Event` objects with `starts_at`, `ends_at`, `all_day`, `description`, `location`, `calendar_id`, and `source`. All date boundaries and event display use `Asia/Seoul` by default.
-
-Calendar changes remain approval gated: the Agent only creates an Action Card; the renderer calls the approval endpoint only when the user presses **등록** (or **삭제**). The backend records `pending_approval → executing → completed/failed` and protects each in-memory action with a lock so a second click cannot create the same event twice. Read failures leave Task and Mail available instead of taking down the dashboard.
-
-### Token security and disconnect behavior
-
-V0.3 defines an `OAuthTokenStore` boundary. Its current `FileTokenStore` writes the refresh-token JSON to `backend/data/google_calendar_token.json` with user-only `0600` permissions; the file and OAuth client JSON names are ignored by Git. This is suitable for local development but not the final production vault: a packaged desktop build should provide a Keychain/Credential Manager implementation behind the same interface.
-
-**연결 해제** deletes this device's local token only. It does not revoke the Google OAuth grant. Revoking the grant is a separate Google-account security action (or can be added as an explicit, clearly labelled future option), because it invalidates the grant rather than merely signing this desktop app out.
-
-### Manual real-account verification
-
-After connection, create `workMate 테스트` for today at 15:00 in Google Calendar (or Samsung Calendar synchronized with the same Google account), then ask `오늘 일정 알려줘.` Confirm it appears in Home and Assistant. Next ask `내일 오후 2시에 workMate 테스트 회의 등록해.`, approve the card, and verify the new event syncs back to Samsung Calendar. Finally ask the Assistant to find the event before proposing a time change or deletion; those changes must likewise remain pending until approval.
-
-## Quality checks
-
-```bash
-npm run typecheck
-npm run lint
-npm run build
-source /Users/bizntech/Desktop/python/.venv/bin/activate && npm run backend:test
+```dotenv
+WORKMATE_CALENDAR_PROVIDER=google
+GOOGLE_CALENDAR_CREDENTIALS_PATH=/절대경로/google-oauth-desktop-client.json
+GOOGLE_CALENDAR_ID=primary
 ```
 
-## Roadmap
+6. 앱을 다시 시작한 뒤 **설정 → Google Calendar → Google 계정 연결**을 선택합니다.
 
-1. Bundle an embedded Python runtime/backend for production Electron installers.
-2. Implement OAuth token vaulting and real Bizmeka / Google providers.
-3. Add approved action execution and editable Action Cards.
-4. Add OS-native scheduler delivery, startup registration, and notification preference controls.
-5. Connect WorkMemory and improve Agent planning with contextual retrieval.
-6. Add encrypted local data policy, audit settings, and end-to-end integration tests.
+첫 연결 뒤의 refresh token은 `backend/data/google_calendar_token.json`에 사용자 전용 권한으로 저장됩니다. 이 파일은 Git에서 제외됩니다. 연결 해제는 이 기기의 로컬 token만 제거하며 Google 계정의 OAuth 권한 자체를 취소하지는 않습니다.
+
+오늘·내일 일정, 검색, 종일 일정, 반복 일정 occurrence를 지원합니다. 일정 생성·수정·삭제는 Agent가 즉시 실행하지 않고 Action Card를 만든 뒤 사용자의 승인 후에만 반영합니다.
+
+## 지식베이스 — WorkMemory 1단계
+
+로컬 폴더와 macOS에 마운트된 SMB 폴더의 문서를 수집할 수 있습니다. 원본 파일과 기존 WorkMemory/MariaDB 데이터는 변경하지 않습니다.
+
+- 등록 → 백그라운드 수집·파싱 → 문서 목록 → 추출 원문 열람
+- 지원 형식: TXT, Markdown, CSV, 코드, JSON/YAML/SQL, PDF, DOCX, XLSX
+- `.env`, 인증서·개인키, `node_modules`, 가상환경 폴더는 수집 대상에서 제외
+- 파일 최대 25 MiB, PDF 최대 500쪽, XLSX 최대 100,000셀 제한
+- SHA-256 기반 변경 감지와 삭제 파일 숨김 처리
+- 수집 진행률 표시 및 파일 단위 안전 중단
+
+SMB 주소 자체가 아니라 macOS에 마운트된 폴더 경로를 등록합니다. 일반적으로 `/Volumes/공유이름/...` 형식입니다.
+
+## API 요약
+
+| 메서드 | 주소 | 설명 |
+| --- | --- | --- |
+| `GET` | `/health` | Backend 상태 확인 |
+| `GET` | `/api/v1/dashboard` | Home 화면용 브리핑·일정·메일·업무·Provider 상태 |
+| `POST` | `/api/v1/chat` | Agent 응답과 선택적 Action Card 반환 |
+| `GET` | `/api/v1/tasks` | 업무 목록 |
+| `POST` | `/api/v1/tasks` | 업무 생성 |
+| `POST` | `/api/v1/tasks/{id}/complete` | 업무 완료 |
+| `GET` | `/api/v1/calendar/status` | Calendar 연결 상태 |
+| `POST` | `/api/v1/calendar/connect` | Google OAuth 연결 시작 |
+| `POST` | `/api/v1/calendar/verify` | Google Calendar 연결 확인 |
+| `POST` | `/api/v1/calendar/disconnect` | 로컬 Calendar token 제거 |
+| `POST` | `/api/v1/actions/{id}/approve` | 승인된 Calendar Action 실행 |
+
+## 프로젝트 구조
+
+```text
+workMate/
+├── electron/                 # Electron main / preload
+├── src/                      # React + TypeScript Renderer
+├── backend/
+│   ├── server/agent/         # Agent와 Tool Calling
+│   ├── server/api/           # FastAPI 라우터와 의존성 구성
+│   ├── server/providers/     # OpenAI·Google Calendar Provider
+│   ├── server/services/      # 업무·대시보드·승인 로직
+│   ├── server/tools/         # 일정·메일·업무·메모리 Tool
+│   └── tests/                # Backend 테스트
+├── .env.example              # 환경변수 템플릿
+├── start-workmate.sh         # macOS 실행 스크립트
+├── start-workmate.bat        # Windows 실행 스크립트
+└── verify-workmate.sh        # 전체 검증 스크립트
+```
+
+## 다음 작업
+
+1. 실제 OpenAI API 키로 일반 대화와 Tool Calling 확인
+2. 실제 Google 계정으로 일정 CRUD와 Samsung Calendar 동기화 확인
+3. macOS Keychain / Windows Credential Manager 기반 OAuth token 저장소 추가
+4. Bizmeka Mail과 WorkMemory 실제 API 연동
+5. Python runtime을 포함한 macOS·Windows 배포 패키지 구성

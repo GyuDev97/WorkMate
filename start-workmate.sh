@@ -13,7 +13,16 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
-PYTHON_ENV="${WORKMATE_PYTHON_ENV:-/Users/bizntech/Desktop/python/.venv}"
+DEFAULT_SHARED_ENV="/Users/bizntech/Desktop/python/venv"
+if [[ -n "${WORKMATE_PYTHON_ENV:-}" ]]; then
+  PYTHON_ENV="$WORKMATE_PYTHON_ENV"
+elif [[ -x "$DEFAULT_SHARED_ENV/bin/python" ]]; then
+  PYTHON_ENV="$DEFAULT_SHARED_ENV"
+elif [[ -x "$ROOT_DIR/venv/bin/python" ]]; then
+  PYTHON_ENV="$ROOT_DIR/venv"
+else
+  PYTHON_ENV="$DEFAULT_SHARED_ENV"
+fi
 PYTHON_BIN="$PYTHON_ENV/bin/python"
 if [[ ! -x "$PYTHON_BIN" ]]; then
   echo "Python 가상환경을 찾을 수 없습니다: $PYTHON_ENV"
@@ -21,7 +30,12 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
   exit 1
 fi
 
-if ! "$PYTHON_BIN" -c 'import fastapi, pypdf, docx, openpyxl' >/dev/null 2>&1; then
+if [[ ! -f .env ]]; then
+  echo ".env를 생성합니다. OpenAI 또는 Google 설정은 나중에 .env에서 입력할 수 있습니다."
+  cp .env.example .env
+fi
+
+if ! "$PYTHON_BIN" -c 'import fastapi, openai, pypdf, docx, openpyxl, googleapiclient, google_auth_oauthlib' >/dev/null 2>&1; then
   echo "백엔드 의존성을 설치합니다..."
   "$PYTHON_BIN" -m pip install -r backend/requirements.txt
 fi
@@ -31,16 +45,7 @@ if [[ ! -d node_modules ]]; then
   npm install
 fi
 
-cleanup() {
-  if [[ -n "${BACKEND_PID:-}" ]] && kill -0 "$BACKEND_PID" 2>/dev/null; then
-    kill "$BACKEND_PID"
-  fi
-}
-trap cleanup EXIT INT TERM
-
-echo "WorkMate 백엔드를 시작합니다..."
-(cd backend && "$PYTHON_BIN" -m uvicorn server.main:app --port 8765) &
-BACKEND_PID=$!
-
-echo "WorkMate 데스크톱 앱을 시작합니다..."
-npm run dev
+echo "workMate 데스크톱 앱을 시작합니다..."
+echo "종료하려면 실행 중인 터미널에서 Ctrl+C를 누르세요."
+# Electron 개발 모드가 이 Python으로 FastAPI를 함께 시작하고 종료합니다.
+WORKMATE_PYTHON="$PYTHON_BIN" npm run dev
