@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import type { ActionCard, ConversationSummary, Dashboard, StoredMessage, UiResult } from '../types'
-import { fmtDate, fmtTime } from '../format'
+import { fmtDate, fmtTime, seoulDateKey } from '../format'
 import { Logo, PageHeader, StatusDot } from '../ui'
 import { ActionPreview } from '../ActionPreview'
 
@@ -18,6 +18,13 @@ function MailResults({ results, openMail }: { results: UiResult[]; openMail: () 
 }
 
 const fromStored = (message: StoredMessage): UiMessage => ({ key: message.id, role: message.role, text: message.content, action: message.action, sources: message.sources, trace: message.trace })
+
+function ConversationGroup({ title, conversations, conversationId, busy, open, remove }: { title: string; conversations: ConversationSummary[]; conversationId: string | null | undefined; busy: boolean; open: (id: string) => void; remove: (conversation: ConversationSummary) => void }) {
+  if (!conversations.length) return null
+  return <section className="conv-group"><small className="conv-group-title">{title}</small>{conversations.map((conversation) => <div key={conversation.id} className={`conv-item ${conversation.id === conversationId ? 'selected' : ''}`}>
+    <button className="conv-open" disabled={busy} onClick={() => open(conversation.id)}><b>{conversation.title}</b><small>{fmtDate(conversation.updated_at)} {fmtTime(conversation.updated_at)} · {conversation.message_count}개</small></button>
+    <button className="conv-delete" aria-label="대화 삭제" disabled={busy} onClick={() => void remove(conversation)}>✕</button></div>)}</section>
+}
 
 type Props = { data: Dashboard; refresh: () => Promise<void>; openMail: () => void; conversationId: string | null | undefined; setConversationId: (id: string | null) => void; draft: string; setDraft: (value: string) => void }
 
@@ -68,6 +75,9 @@ export function Assistant({ data, refresh, openMail, conversationId, setConversa
   }
   const busy = loading || restoring
   const next = data.events.find((event) => new Date(event.starts_at).getTime() >= Date.now())
+  const today = seoulDateKey()
+  const todayConversations = conversations?.filter((conversation) => seoulDateKey(conversation.created_at) === today) ?? []
+  const previousConversations = conversations?.filter((conversation) => seoulDateKey(conversation.created_at) !== today) ?? []
   return <><PageHeader title="메이트" text="말로 요청하면 상황을 확인하고 필요한 작업을 준비합니다." action={<button className="secondary" disabled={busy || (!conversationId && messages.length === 0)} onClick={() => { setConversationId(null); setDraft('') }}>+ 새 대화</button>} />
     <section className="assistant-layout"><article className="panel conversation"><div className="conversation-head"><span><Logo /></span><div><b>workMate 메이트</b><small><StatusDot state="connected" />준비됨 · Tool Calling</small></div></div>
       <div className="messages" ref={scroller}>
@@ -80,9 +90,7 @@ export function Assistant({ data, refresh, openMail, conversationId, setConversa
       <form className="composer" onSubmit={submit}><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="workMate에게 요청하세요…" /><button className="send" type="submit" disabled={busy}>↑</button></form></article>
       <aside className="assistant-side">
         <article className="panel compact conv-panel"><div className="conv-head"><h2>대화 기록</h2></div>
-          <div className="conv-list">{conversations === null ? <small className="conv-empty">불러오는 중…</small> : conversations.length ? conversations.map((conversation) => <div key={conversation.id} className={`conv-item ${conversation.id === conversationId ? 'selected' : ''}`}>
-            <button className="conv-open" disabled={busy} onClick={() => setConversationId(conversation.id)}><b>{conversation.title}</b><small>{fmtDate(conversation.updated_at)} {fmtTime(conversation.updated_at)} · {conversation.message_count}개</small></button>
-            <button className="conv-delete" aria-label="대화 삭제" disabled={busy} onClick={() => void remove(conversation)}>✕</button></div>) : <small className="conv-empty">저장된 대화가 없습니다.</small>}</div></article>
+          <div className="conv-list">{conversations === null ? <small className="conv-empty">불러오는 중…</small> : conversations.length ? <><ConversationGroup title="오늘" conversations={todayConversations} conversationId={conversationId} busy={busy} open={setConversationId} remove={remove} /><ConversationGroup title="이전 대화" conversations={previousConversations} conversationId={conversationId} busy={busy} open={setConversationId} remove={remove} /></> : <small className="conv-empty">저장된 대화가 없습니다.</small>}</div></article>
         <article className="panel compact"><h2>빠른 질문</h2><p>자주 쓰는 요청으로 바로 시작하세요.</p><div className="prompt-list">{prompts.map((prompt) => <button key={prompt} onClick={() => setDraft(prompt)}>{prompt}<span>→</span></button>)}</div></article>
         <article className="panel compact next-event"><p className="eyebrow">NEXT UP</p><h3>{next?.title ?? '다음 일정이 없습니다.'}</h3><b>{next ? fmtTime(next.starts_at) : ''}</b><small>{next ? 'Calendar Provider 기준' : '예정된 일정 없음'}</small></article></aside></section></>
 }

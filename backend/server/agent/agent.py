@@ -34,8 +34,21 @@ class WorkMateAgent:
         traces: list[ToolTrace] = []
         action: ActionCard | None = None
         failures: list[str] = []
+        task_list_result: tuple[Any, str, bool] | None = None
         ui_results: list[dict[str, Any]] = []
         final_text = ""
+        requested_task_view = self._requested_task_view(message)
+        if requested_task_view:
+            # A task listing is a live SQLite read, not a conversational inference.  Do it before
+            # sending history to the provider so an older “no tasks” answer cannot win.
+            result, trace = self.tools.execute("list_tasks", {"view": requested_task_view, "query": ""})
+            if self.activity:
+                self.activity.record_tool_trace(trace)
+            final_text = self._task_list_message(result, requested_task_view, trace.success)
+            if not persisted:
+                history.append({"role": "user", "content": message})
+                history.append({"role": "assistant", "content": final_text})
+            return ChatResponse(message=final_text, sources=["list_tasks"] if trace.success else [], trace=[trace], metadata={"provider": self.provider.mode})
         logger.info("agent_request provider=%s conversation=%s chars=%d history=%d", self.provider.mode, conversation_id, len(message), len(history))
         for _round in range(self.max_tool_rounds):
             try:
@@ -55,6 +68,8 @@ class WorkMateAgent:
             for call in turn.tool_calls:
                 result, trace = self.tools.execute(call.name, call.arguments)
                 traces.append(trace)
+                if call.name == "list_tasks":
+                    task_list_result = (result, str(call.arguments.get("view", "all")), trace.success)
                 if self.activity: self.activity.record_tool_trace(trace)
                 if not trace.success: failures.append(call.name)
                 if ui := self.tools.ui_from(result): ui_results.append(ui)
@@ -64,6 +79,8 @@ class WorkMateAgent:
                 logger.info("agent_tool_result tool=%s risk=%s success=%s duration_ms=%d", trace.tool, trace.risk.value, trace.success, trace.duration_ms)
         else:
             final_text = "요청 처리 중 도구 호출 한도에 도달했습니다. 필요한 정보를 좁혀 다시 요청해 주세요."
+        if task_list_result and self._is_task_list_request(message):
+            final_text = self._task_list_message(*task_list_result)
         if failures and final_text and "오류" not in final_text:
             final_text += "\n\n일부 정보 조회에 실패해, 확인된 결과만 안내했습니다."
         if not persisted:
@@ -72,3 +89,41 @@ class WorkMateAgent:
         sources = sorted({trace.tool for trace in traces if trace.success})
         logger.info("agent_complete provider=%s tools=%d action=%s", self.provider.mode, len(traces), action.kind if action else "none")
         return ChatResponse(message=final_text, action=action, sources=sources, trace=traces, ui_results=ui_results, metadata={"provider": self.provider.mode})
+
+    @staticmethod
+    def _is_task_list_request(message: str) -> bool:
+        """Keep a fresh task lookup authoritative, even when an old chat turn says it was empty."""
+        return "업무" in message and any(word in message for word in ("보여", "알려", "찾", "목록", "내 업무", "등록된"))
+
+    @classmethod
+    def _requested_task_view(cls, message: str) -> str | None:
+        if not cls._is_task_list_request(message):
+            return None
+        if "마감" in message and "오늘" in message:
+            return "due_today"
+        if "기한" in message and any(word in message for word in ("지난", "초과")):
+            return "overdue"
+        if "우선순위" in message and "높" in message:
+            return "high_priority"
+        if "진행 중" in message:
+            return "active"
+        if "완료" in message:
+            return "done"
+        return "all"
+
+    @staticmethod
+    def _task_list_message(result: Any, view: str, success: bool) -> str:
+        if not success or not isinstance(result, list):
+            return "업무 조회 중 오류가 발생했습니다. 업무가 없는 것은 아니므로 잠시 후 다시 시도해 주세요."
+        if not result:
+            return "등록된 업무가 없습니다." if view == "all" else "조건에 맞는 업무가 없습니다."
+        labels = {"TODO": "할 일", "IN_PROGRESS": "진행 중", "DONE": "완료", "CANCELLED": "취소"}
+        lines = []
+        for task in result[:15]:
+            status = getattr(task, "status", "")
+            status = getattr(status, "value", status)
+            due = getattr(task, "due_at", None)
+            due_text = due.astimezone(ZoneInfo("Asia/Seoul")).strftime("%m-%d %H:%M") if due else "기한 없음"
+            lines.append(f"- {getattr(task, 'title', '제목 없음')} · {labels.get(status, status)} · 마감 {due_text}")
+        suffix = "" if len(result) <= 15 else f"\n외 {len(result) - 15}건"
+        return f"업무 {len(result)}건입니다.\n" + "\n".join(lines) + suffix

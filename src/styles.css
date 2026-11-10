@@ -43,7 +43,7 @@ textarea { font: inherit; } button:disabled { opacity: .55; cursor: not-allowed;
 .source-badge.off { background: #eef1f6; color: #7d8aa0; } .source-badge.error { background: #fff0ec; color: #c4503f; } .calendar-state { display: grid; gap: 8px; justify-items: center; } .calendar-state small { color: #8b96aa; font-size: 11px; max-width: 360px; } .calendar-state.error { color: #c4503f; } .recurring { color: #8b96aa; font-weight: 400; font-size: 11px; }
 
 /* Assistant conversation history */
-.conv-panel { padding: 16px; } .conv-head h2 { font-size: 14px; } .conv-list { display: grid; gap: 3px; margin-top: 10px; max-height: 190px; overflow-y: auto; }
+.conv-panel { padding: 16px; } .conv-head h2 { font-size: 14px; } .conv-list { display: grid; gap: 10px; margin-top: 10px; max-height: 190px; overflow-y: auto; } .conv-group { display: grid; gap: 3px; } .conv-group-title { color: #8e9aae; font-size: 10px; font-weight: 700; padding: 2px 5px; }
 .conv-item { display: flex; align-items: center; border-radius: 8px; } .conv-item:hover, .conv-item.selected { background: #edf4ff; }
 .conv-open { flex: 1; min-width: 0; background: transparent; text-align: left; padding: 8px 9px; color: #52617a; } .conv-open b, .conv-open small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .conv-open b { font-size: 12px; } .conv-open small { color: #8e9aae; font-size: 10px; margin-top: 3px; }
 .conv-delete { background: transparent; color: #a8b2c3; font-size: 11px; padding: 6px 8px; } .conv-delete:hover { color: #d16d5a; } .conv-empty { color: #9aa5b7; font-size: 11px; padding: 6px 4px; }

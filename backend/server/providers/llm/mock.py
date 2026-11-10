@@ -97,6 +97,8 @@ class MockLLMProvider:
             if "기한" in text and any(token in text for token in ("지난", "초과")): return [self._call("list_tasks", view="overdue")]
             if "우선순위" in text and "높" in text: return [self._call("list_tasks", view="high_priority")]
             if "진행 중" in text: return [self._call("list_tasks", view="active")]
+            if "완료" in text: return [self._call("list_tasks", view="done")]
+            return [self._call("list_tasks", view="all")]
         return []
 
     def _choose_tools(self, text: str) -> list[ToolCall]:

@@ -386,6 +386,35 @@ def test_task_read_tools_need_no_approval_and_change_nothing() -> None:
     assert "지난 쿼카 업무" not in _chat("오늘 마감인 업무 알려줘")["message"]
 
 
+def test_generic_task_list_uses_current_all_view_and_is_not_overridden_by_history() -> None:
+    # An earlier empty answer in the same conversation must never replace a fresh SQLite lookup.
+    first = _chat("등록된 업무 알려줘", "fresh-list")
+    assert "등록된 업무가 없습니다" in first["message"]
+    active = _task("진행 업무")
+    client.patch(f"/api/v1/tasks/{active['id']}", json={"status": "IN_PROGRESS"})
+    done = _task("완료 업무")
+    client.patch(f"/api/v1/tasks/{done['id']}", json={"status": "DONE"})
+    no_due = _task("기한 없는 업무")
+    reply = _chat("내 업무 보여줘", "fresh-list")
+    assert reply["trace"][0]["tool"] == "list_tasks"
+    assert {item["id"] for item in client.get("/api/v1/tasks", params={"view": "all"}).json()} == {active["id"], done["id"], no_due["id"]}
+    assert all(title in reply["message"] for title in ("진행 업무", "완료 업무", "기한 없는 업무"))
+
+
+def test_task_list_filters_only_when_explicit_and_reports_tool_failure(monkeypatch) -> None:
+    active_task = _task("진행 업무")
+    client.patch(f"/api/v1/tasks/{active_task['id']}", json={"status": "IN_PROGRESS"})
+    done_task = _task("완료 업무")
+    client.patch(f"/api/v1/tasks/{done_task['id']}", json={"status": "DONE"})
+    active = _chat("진행 중인 업무 보여줘")
+    assert active["trace"][0]["tool"] == "list_tasks" and "진행 업무" in active["message"] and "완료 업무" not in active["message"]
+
+    monkeypatch.setattr(dependencies.task_service(), "list_tasks", lambda *_args: (_ for _ in ()).throw(RuntimeError("SQLite unavailable")))
+    failed = _chat("내 업무 보여줘", "task-tool-error")
+    assert failed["trace"][0]["success"] is False
+    assert "조회 중 오류" in failed["message"] and "업무가 없습니다" not in failed["message"]
+
+
 def test_task_create_requires_approval_and_is_not_duplicated() -> None:
     before = _titles()
     reply = _chat("내일 마감으로 신규 보고서 작성 업무를 추가해 줘")

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from './api'
 import type { CalendarConnectionStatus, Dashboard, PriorityItem, TaskView } from './types'
-import { fmtDate, fmtTime } from './format'
+import { fmtDate, fmtTime, seoulDateKey } from './format'
 import { Logo, PageHeader, StatusDot } from './ui'
 import { Assistant } from './pages/Assistant'
 import { KnowledgeBase } from './pages/KnowledgeBase'
@@ -77,11 +77,22 @@ function Activity({ activities }: { activities: Dashboard['activities'] }) { ret
 function Offline({ retry }: { retry: () => void }) { return <main className="offline"><Logo /><h1>Backend Offline</h1><p>workMate 백엔드에 연결할 수 없습니다. FastAPI 서버가 실행 중인지 확인한 뒤 다시 시도해 주세요.</p><button className="primary" onClick={retry}>다시 연결</button><code>cd backend && python3 -m uvicorn server.main:app --port 8765</code></main> }
 
 const CONVERSATION_KEY = 'workmate.assistant.conversation'
+const CONVERSATION_SESSION_DATE_KEY = 'workmate.assistant.session-date'
 // undefined = never chosen (reopen the latest), null = an explicit empty "new conversation"
 function readConversation(): string | null | undefined { try { const value = window.localStorage.getItem(CONVERSATION_KEY); return value === null ? undefined : value === '' ? null : value } catch { return undefined } }
+function readConversationForAppSession(): string | null | undefined {
+  try {
+    const today = seoulDateKey(); const lastSessionDate = window.localStorage.getItem(CONVERSATION_SESSION_DATE_KEY)
+    window.localStorage.setItem(CONVERSATION_SESSION_DATE_KEY, today)
+    // A new calendar day deliberately starts blank. `null` prevents Assistant from selecting the latest item.
+    if (lastSessionDate === today) return readConversation()
+    window.localStorage.setItem(CONVERSATION_KEY, '')
+    return null
+  } catch { return readConversation() }
+}
 
 export default function App() {
-  const [page, setPage] = useState<Page>('home'); const [taskView, setTaskView] = useState<TaskView>('active'); const [conversationId, setConversationState] = useState<string | null | undefined>(readConversation); const [draft, setDraft] = useState(''); const [data, setData] = useState<Dashboard | null>(null); const [offline, setOffline] = useState(false)
+  const [page, setPage] = useState<Page>('home'); const [taskView, setTaskView] = useState<TaskView>('active'); const [conversationId, setConversationState] = useState<string | null | undefined>(readConversationForAppSession); const [draft, setDraft] = useState(''); const [data, setData] = useState<Dashboard | null>(null); const [offline, setOffline] = useState(false)
   const setConversationId = useCallback((id: string | null) => { setConversationState(id); try { window.localStorage.setItem(CONVERSATION_KEY, id ?? '') } catch { /* private mode: keep it in memory only */ } }, [])
   const load = async () => { try { await api.health(); setData(await api.dashboard()); setOffline(false) } catch { setOffline(true) } }
   useEffect(() => {
