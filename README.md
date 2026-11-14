@@ -22,7 +22,6 @@ macOS에서는 프로젝트 루트에서 아래 명령 하나로 실행합니다
 ```bash
 ./start-workmate.sh
 ```
-
 스크립트는 다음을 자동으로 처리합니다.
 
 1. Node.js, npm, Python 가상환경 존재 여부 확인
@@ -42,10 +41,11 @@ Windows 기본 Python 가상환경 경로는 `D:\python\venv`입니다. 다른 �
 
 ## 처음 한 번만 하는 준비
 
-필수 환경은 Node.js 20 이상과 Python 3.10 이상입니다. 기본 Python 가상환경은 다음 위치를 사용합니다.
+필수 환경은 Node.js 20 이상과 Python 3.10 이상입니다. 프로젝트 루트의 `venv` 가상환경을 사용하거나, 이미 사용하는 가상환경 경로를 지정할 수 있습니다.
 
-```text
-/Users/bizntech/Desktop/python/venv
+```bash
+python3 -m venv venv
+venv/bin/pip install -r backend/requirements.txt
 ```
 
 다른 가상환경을 쓰려면 실행 전에 경로를 지정합니다.
@@ -59,7 +59,7 @@ WORKMATE_PYTHON_ENV=/원하는/가상환경 ./start-workmate.sh
 ```bash
 cp .env.example .env
 npm install
-/Users/bizntech/Desktop/python/venv/bin/pip install -r backend/requirements.txt
+venv/bin/pip install -r backend/requirements.txt
 ```
 
 `.env`와 OAuth token은 Git에 포함되지 않습니다. Finder에서 점으로 시작하는 파일을 보려면 `Cmd + Shift + .`를 누릅니다.
@@ -75,7 +75,7 @@ npm install
 ### 개발 명령 직접 실행
 
 ```bash
-source /Users/bizntech/Desktop/python/venv/bin/activate
+source venv/bin/activate
 npm run dev
 ```
 
@@ -208,11 +208,3 @@ workMate/
 ├── start-workmate.bat        # Windows 실행 스크립트
 └── verify-workmate.sh        # 전체 검증 스크립트
 ```
-
-## 다음 작업
-
-1. 실제 OpenAI API 키로 일반 대화와 Tool Calling 확인
-2. 실제 Google 계정으로 일정 CRUD와 Samsung Calendar 동기화 확인
-3. macOS Keychain / Windows Credential Manager 기반 OAuth token 저장소 추가
-4. Bizmeka Mail과 WorkMemory 실제 API 연동
-5. Python runtime을 포함한 macOS·Windows 배포 패키지 구성
