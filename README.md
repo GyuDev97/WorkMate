@@ -2,6 +2,10 @@
 
 workMate는 일정·메일·업무·지식베이스를 한곳에서 정리하는 Electron 기반 개인 AI 업무 비서입니다. 개발 환경에서는 React Renderer, Electron 데스크톱 셸, FastAPI Backend가 함께 동작합니다.
 
+## 화면 예시
+
+![workMate 홈 대시보드](docs/images/workmate-home-dashboard.png)
+
 ## 현재 구현 상태
 
 | 영역 | 상태 | 설명 |
